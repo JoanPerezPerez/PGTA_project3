@@ -16,28 +16,22 @@ def parse_value(value):
     Parsea valores que pueden ser 'NV', NaN, o numéricos con comas decimales.
     Maneja formato CSV español (comas como decimales).
     """
-    # Caso 1: None
     if value is None:
         return None
     
-    # Caso 2: NaN de pandas
     if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
         return None
     
-    # Caso 3: Ya es número válido
     if isinstance(value, (int, float)) and not math.isnan(value):
         return float(value)
     
-    # Caso 4: String
     if isinstance(value, str):
         value_clean = value.strip().upper()
         
-        # Valores especiales
         if value_clean in ['NV', '', 'NA', 'NULL', 'NONE', '-']:
             return None
         
         try:
-            # Reemplazar coma por punto (formato español)
             result = float(value.strip().replace(',', '.'))
             return result if not (math.isnan(result) or math.isinf(result)) else None
         except (ValueError, AttributeError):
@@ -52,16 +46,13 @@ def parse_time_string(time_str: str) -> float:
     Soporta formatos: HH:MM:SS y HH:MM:SS:ffffff
     """
     try:
-        # Intentar con microsegundos
         t = datetime.strptime(time_str, "%H:%M:%S:%f")
         return t.hour * 3600 + t.minute * 60 + t.second + t.microsecond / 1e6
     except ValueError:
         try:
-            # Intentar sin microsegundos
             t = datetime.strptime(time_str, "%H:%M:%S")
             return t.hour * 3600 + t.minute * 60 + t.second
         except ValueError:
-            # Formato no reconocido
             print(f"⚠️  Formato de tiempo no reconocido: {time_str}")
             return 0.0
 
@@ -114,7 +105,7 @@ def parse_csv_to_dataitem_list(csv_file: str) -> List[DataItem]:
             flight_status = str(row.get('STAT', '')).strip()
             if 'ground' in flight_status.lower():
                 stats['on_ground'] += 1
-                continue
+                continue  # ← CORREGIDO: Saltar SIEMPRE si on-ground
             
             # Parsear tiempo
             time_str = str(row.get('Time', '0'))
@@ -124,7 +115,15 @@ def parse_csv_to_dataitem_list(csv_file: str) -> List[DataItem]:
             rho = parse_value(row.get('RHO', 0))
             theta = parse_value(row.get('THETA', 0))
             fl = parse_value(row.get('FL', None))
+            
+            # Parsear QNH si está disponible (del BDS 4.0 BP)
             bp = parse_value(row.get('BP', None))
+            
+            # *** CORREGIDO: Validar rango de QNH ***
+            qnh = 1013.25  # Default QNE
+            if bp is not None and 900 < bp < 1100:  # Rango válido de presión
+                qnh = bp
+            
             ra = parse_value(row.get('RA', None))
             tta = parse_value(row.get('TTA', None))
             gs = parse_value(row.get('GS', None))
@@ -160,18 +159,30 @@ def parse_csv_to_dataitem_list(csv_file: str) -> List[DataItem]:
                 bds60_barometric_altitude_rate=float(bar) if bar is not None else None,
                 bds60_inertial_vertical_velocity=float(ivv) if ivv is not None else None,
             )
-            
+
             # Calcular coordenadas proyectadas
             x, y = geodetic_to_stereographic(item.lat, item.lon)
             item.x = x
             item.y = y
-            
-            # Calcular altitud corregida por QNH
+
+            # CORRECCIÓN QNH CORRECTA
             if item.fl is not None:
-                item.barometric_altitude = item.fl * 100
+                # Convertir FL a pies
+                fl_feet = item.fl * 100
+                
+                # Por DEBAJO de 6000 ft: Aplicar corrección QNH
+                if fl_feet <= 6000:
+                    # Corrección: 1 hPa ≈ 27 pies
+                    qnh_correction = (qnh - 1013.25) * 27
+                    item.barometric_altitude = fl_feet + qnh_correction
+                else:
+                    # Por ENCIMA de 6000 ft: Usar FL directamente (ya está en QNE)
+                    item.barometric_altitude = fl_feet
             else:
+                # Si no hay FL, usar H(m) convertido a pies
                 item.barometric_altitude = item.h
             
+            # *** CRÍTICO: AÑADIR ITEM A LA LISTA ***
             data_items.append(item)
             stats['valid'] += 1
             
@@ -238,4 +249,3 @@ def filter_data_items(data_items: List[DataItem]) -> List[DataItem]:
     print(f"  - RESULTADO: {stats['passed']} registros")
     
     return filtered
-

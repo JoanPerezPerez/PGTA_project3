@@ -9,20 +9,7 @@ import math
 
 
 def check_radar_separation(distance_nm: float, zone: str = 'TWR') -> bool:
-    """
-    Verifica si se cumple la mínima separación radar según la zona.
-    
-    Args:
-        distance_nm: Distancia en millas náuticas
-        zone: Zona donde se evalúa ('TWR' o 'TMA')
-    
-    Returns:
-        True si hay incumplimiento (distancia < mínima), False si se cumple
-        
-    Raises:
-        ValueError: Si zone no es válida o distance_nm es inválida
-    """
-    # Validar entrada
+    """Verifica si se cumple la mínima separación radar según la zona."""
     if math.isnan(distance_nm) or math.isinf(distance_nm):
         raise ValueError(f"Distancia inválida: {distance_nm}")
     
@@ -41,85 +28,88 @@ def check_radar_separation(distance_nm: float, zone: str = 'TWR') -> bool:
     return distance_nm < minima_nm
 
 
-# Mapeo de categorías de estela (extraído como constante para mejor mantenimiento)
+# Mapeo COMPLETO de categorías de estela
 WAKE_CATEGORY_MAPPING = {
+    # Español
     'PESADA': 'HEAVY',
-    'HEAVY': 'HEAVY',
     'MEDIA': 'MEDIUM',
-    'MEDIUM': 'MEDIUM',
     'LIGERA': 'LIGHT',
+    # Inglés
+    'HEAVY': 'HEAVY',
+    'MEDIUM': 'MEDIUM',
     'LIGHT': 'LIGHT',
     'SUPER': 'SUPER',
+    # Abreviaturas ICAO (las más comunes)
+    'H': 'HEAVY',
+    'M': 'MEDIUM',
+    'L': 'LIGHT',
+    'J': 'SUPER',  # Super/Jumbo
+    'S': 'SUPER',
+    # Otras variantes
+    'UPPER': 'SUPER',
     'UNKNOWN': 'UNKNOWN',
+    '': 'UNKNOWN',
+    'N/A': 'UNKNOWN',
 }
 
 
 def normalize_wake_category(wake: Optional[str]) -> str:
-    """
-    Normaliza la categoría de estela a formato estándar.
-    
-    Args:
-        wake: Categoría de estela (puede ser None o string)
-    
-    Returns:
-        Categoría normalizada ('SUPER', 'HEAVY', 'MEDIUM', 'LIGHT', 'UNKNOWN')
-    """
-    if not wake or wake == '-':
+    """Normaliza la categoría de estela a formato estándar."""
+    if wake is None or wake == '-' or wake == '':
         return 'UNKNOWN'
     
-    wake_upper = wake.strip().upper()
-    return WAKE_CATEGORY_MAPPING.get(wake_upper, 'UNKNOWN')
+    wake_upper = str(wake).strip().upper()
+    
+    # Intentar mapeo directo
+    if wake_upper in WAKE_CATEGORY_MAPPING:
+        return WAKE_CATEGORY_MAPPING[wake_upper]
+    
+    # Si no existe, devolver UNKNOWN
+    return 'UNKNOWN'
 
 
 def check_wake_turbulence_separation(
     preceding_wake: str,
     following_wake: str,
-    distance_nm: float
+    distance_nm: float,
+    debug: bool = False
 ) -> Tuple[bool, Optional[float]]:
     """
     Verifica si se cumple la separación por estela turbulenta.
     Aplicable tanto en TWR como en TMA.
-    
-    Args:
-        preceding_wake: Categoría de estela precedente
-        following_wake: Categoría de estela siguiente
-        distance_nm: Distancia actual en NM
-    
-    Returns:
-        Tuple (incumplimiento, separación_requerida)
-        - incumplimiento: True si no se cumple la separación
-        - separación_requerida: Separación mínima en NM, None si no aplica
     """
     # Normalizar categorías
     prec_wake = normalize_wake_category(preceding_wake)
     foll_wake = normalize_wake_category(following_wake)
     
+    if debug:
+        print(f"    [WAKE] Prec={preceding_wake}→{prec_wake}, Foll={following_wake}→{foll_wake}, Dist={distance_nm:.2f} NM")
+    
     # Si alguna es desconocida, no aplica separación por estela
     if prec_wake == 'UNKNOWN' or foll_wake == 'UNKNOWN':
+        if debug:
+            print(f"    [WAKE] ❌ Alguna categoría UNKNOWN → No aplica separación")
         return False, None
     
     key = (prec_wake, foll_wake)
     
     if key not in constants.WAKE_TURBULENCE_SEPARATION:
+        if debug:
+            print(f"    [WAKE] ⚠️  Combinación {key} NO está en tabla → No aplica separación")
         return False, None  # No aplica separación por estela
     
     required_separation = constants.WAKE_TURBULENCE_SEPARATION[key]
     incumplimiento = distance_nm < required_separation
     
+    if debug:
+        status = "❌ INCUMPLIMIENTO" if incumplimiento else "✅ OK"
+        print(f"    [WAKE] {status}: {distance_nm:.2f} < {required_separation} NM")
+    
     return incumplimiento, required_separation
 
 
 def get_wake_category_priority(wake: str) -> int:
-    """
-    Devuelve un valor numérico de prioridad para la categoría de estela.
-    Útil para ordenamiento y comparaciones.
-    
-    Args:
-        wake: Categoría de estela
-    
-    Returns:
-        Valor numérico (mayor = más pesado): 4=SUPER, 3=HEAVY, 2=MEDIUM, 1=LIGHT, 0=UNKNOWN
-    """
+    """Devuelve un valor numérico de prioridad para la categoría de estela."""
     wake_normalized = normalize_wake_category(wake)
     
     priorities = {
@@ -131,4 +121,3 @@ def get_wake_category_priority(wake: str) -> int:
     }
     
     return priorities[wake_normalized]
-

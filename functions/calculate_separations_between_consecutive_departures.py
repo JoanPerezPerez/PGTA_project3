@@ -22,15 +22,7 @@ import constants
 # ============================================================================
 
 def group_detections_by_callsign(data_items: List[DataItem]) -> Dict[str, List[DataItem]]:
-    """
-    Agrupa detecciones radar por callsign y las ordena por tiempo.
-    
-    Args:
-        data_items: Lista de objetos DataItem
-    
-    Returns:
-        Diccionario {callsign: [detections ordenadas por tiempo]}
-    """
+    """Agrupa detecciones radar por callsign y las ordena por tiempo."""
     detections = {}
     for item in data_items:
         if item.callsign and item.callsign.strip():
@@ -38,7 +30,6 @@ def group_detections_by_callsign(data_items: List[DataItem]) -> Dict[str, List[D
                 detections[item.callsign] = []
             detections[item.callsign].append(item)
     
-    # Ordenar cada grupo por tiempo
     for callsign in detections:
         detections[callsign].sort(key=lambda x: x.time)
     
@@ -54,28 +45,38 @@ def find_first_valid_detection(
     """
     Encuentra la primera detección válida (>= 0.5 NM del umbral EN MODO ALEJAMIENTO).
     
-    CORREGIDO: Verifica que la aeronave se está ALEJANDO del umbral.
+    CORREGIDO: Implementación más robusta.
     """
-    prev_distance = None
+    if not detections or len(detections) < 1:
+        return None
     
+    # Calcular distancias para todas las detecciones
+    distances = []
     for det in detections:
-        dist_to_thr = calculate_distance_to_threshold(det.lat, det.lon, thr_lat, thr_lon)
+        dist = calculate_distance_to_threshold(det.lat, det.lon, thr_lat, thr_lon)
+        distances.append((det, dist))
+    
+    # Buscar primera detección >= 0.5 NM que esté alejándose
+    for i in range(len(distances)):
+        det_current, dist_current = distances[i]
         
-        # Verificar si cumple distancia mínima
-        if dist_to_thr >= min_distance_nm:
-            # Verificar modo ALEJAMIENTO
-            if prev_distance is None:
-                # Primera iteración: asumir que es válida si cumple distancia
-                prev_distance = dist_to_thr
-                continue
-            elif dist_to_thr > prev_distance:
-                # Se está ALEJANDO del umbral → VÁLIDO
-                return det
+        # Verificar distancia mínima
+        if dist_current >= min_distance_nm:
+            # Verificar ALEJAMIENTO si hay detección anterior
+            if i == 0:
+                # Primera detección: aceptar si cumple distancia
+                return det_current
             else:
-                # Se está ACERCANDO al umbral → seguir buscando
-                prev_distance = dist_to_thr
-        else:
-            prev_distance = dist_to_thr
+                det_prev, dist_prev = distances[i-1]
+                if dist_current > dist_prev:
+                    # Se está alejando → VÁLIDA
+                    return det_current
+                # Si no se aleja, seguir buscando
+    
+    # Si no encuentra ninguna alejándose, devolver la primera que cumpla distancia
+    for det, dist in distances:
+        if dist >= min_distance_nm:
+            return det
     
     return None
 
@@ -85,17 +86,7 @@ def find_concurrent_detection(
     reference_time: float,
     max_time_diff: float = constants.TOLERANCE_TIME_SECONDS
 ) -> Optional[DataItem]:
-    """
-    Encuentra la detección más cercana en tiempo a un momento de referencia.
-    
-    Args:
-        detections: Lista de detecciones
-        reference_time: Tiempo de referencia (segundos desde medianoche)
-        max_time_diff: Máxima diferencia temporal permitida (segundos)
-    
-    Returns:
-        Detección más cercana en tiempo, o None si excede tolerancia
-    """
+    """Encuentra la detección más cercana en tiempo a un momento de referencia."""
     min_time_diff = float('inf')
     best_detection = None
     
@@ -112,27 +103,16 @@ def do_flight_trajectories_overlap(
     preceding_detections: List[DataItem],
     following_detections: List[DataItem]
 ) -> bool:
-    """
-    Verifica si las trayectorias de vuelo de dos aeronaves se solapan en el tiempo.
-    
-    Args:
-        preceding_detections: Detecciones del avión precedente
-        following_detections: Detecciones del avión siguiente
-    
-    Returns:
-        True si hay solapamiento temporal (ambos en vuelo a la vez)
-    """
+    """Verifica si las trayectorias de vuelo se solapan temporalmente."""
     if not preceding_detections or not following_detections:
         return False
     
-    # Obtener ventanas temporales de cada vuelo
     prec_start = min(d.time for d in preceding_detections)
     prec_end = max(d.time for d in preceding_detections)
     
     foll_start = min(d.time for d in following_detections)
     foll_end = max(d.time for d in following_detections)
     
-    # Verificar solapamiento: el siguiente debe despegar antes de que aterrice el precedente
     # Solapamiento si: foll_start < prec_end
     return foll_start < prec_end
 
@@ -141,12 +121,7 @@ def calculate_overlap_duration(
     preceding_detections: List[DataItem],
     following_detections: List[DataItem]
 ) -> float:
-    """
-    Calcula la duración del solapamiento temporal entre dos trayectorias.
-    
-    Returns:
-        Duración en segundos del solapamiento
-    """
+    """Calcula la duración del solapamiento temporal."""
     if not preceding_detections or not following_detections:
         return 0.0
     
@@ -156,7 +131,6 @@ def calculate_overlap_duration(
     foll_start = min(d.time for d in following_detections)
     foll_end = max(d.time for d in following_detections)
     
-    # Calcular solapamiento
     overlap_start = max(prec_start, foll_start)
     overlap_end = min(prec_end, foll_end)
     
@@ -171,52 +145,32 @@ def calculate_minimum_tma_distance(
     following_detections: List[DataItem],
     first_valid_time: float
 ) -> Tuple[float, Optional[float]]:
-    """
-    Calcula la mínima distancia en zona TMA entre dos aeronaves.
-    CORREGIDO: Solo compara detecciones que ocurren en el mismo período temporal.
-    
-    Args:
-        preceding_detections: Detecciones de la aeronave precedente
-        following_detections: Detecciones de la aeronave siguiente
-        first_valid_time: Tiempo de la primera detección válida del siguiente
-    
-    Returns:
-        Tuple (min_distance_nm, time_of_minimum)
-    """
+    """Calcula la mínima distancia en zona TMA entre dos aeronaves."""
     min_distance = float('inf')
     min_time = None
     
-    # Filtrar detecciones del siguiente posteriores a first_valid_time
     following_filtered = [d for d in following_detections if d.time > first_valid_time]
     
     if not following_filtered:
         return min_distance, min_time
     
-    # IMPORTANTE: Obtener ventana temporal del siguiente
     foll_time_start = following_filtered[0].time
     foll_time_end = following_filtered[-1].time
     
-    # Filtrar detecciones del precedente que están:
-    # 1. En el área válida (geografía y altitud)
-    # 2. EN EL MISMO PERÍODO TEMPORAL que el siguiente
     preceding_filtered = [
         d for d in preceding_detections
         if d.is_in_geographic_filter() and
            (not d.barometric_altitude or d.barometric_altitude <= 6000) and
-           foll_time_start <= d.time <= foll_time_end  # ← VALIDACIÓN TEMPORAL
+           foll_time_start <= d.time <= foll_time_end
     ]
     
     if not preceding_filtered:
-        # El precedente ya salió del área antes de que entrara el siguiente
         return min_distance, min_time
     
-    # Calcular mínima distancia entre detecciones temporalmente solapadas
     for foll_det in following_filtered:
-        # Buscar detecciones del precedente cercanas en tiempo
         for prec_det in preceding_filtered:
-            # Opcional: solo comparar si las detecciones son cercanas en tiempo (±30 segundos)
             time_diff = abs(prec_det.time - foll_det.time)
-            if time_diff > 30:  # Tolerancia de 30 segundos
+            if time_diff > 30:
                 continue
             
             dist = calculate_distance_2d(prec_det.x, prec_det.y, foll_det.x, foll_det.y)
@@ -228,7 +182,7 @@ def calculate_minimum_tma_distance(
 
 
 # ============================================================================
-# FUNCIÓN PRINCIPAL DE PROCESAMIENTO
+# FUNCIÓN PRINCIPAL
 # ============================================================================
 
 def process_consecutive_pair(
@@ -239,47 +193,48 @@ def process_consecutive_pair(
     thr_lon: float,
     runway: str
 ) -> Optional[Dict]:
-    """
-    Procesa una pareja de despegues consecutivos.
-    CORREGIDO: Verifica solapamiento temporal.
+    """Procesa una pareja de despegues consecutivos con DEBUG."""
     
-    Returns:
-        Diccionario con resultados o None si no se puede analizar
-    """
     prec_callsign = preceding['Indicativo']
     foll_callsign = following['Indicativo']
     
-    # Verificar que ambos tienen detecciones
+    # DEBUG: Mostrar qué está pasando
+    debug_mode = False  # Cambia a True para ver detalles
+    
     if prec_callsign not in detections or foll_callsign not in detections:
+        if debug_mode:
+            print(f"  ❌ {prec_callsign}/{foll_callsign}: Sin detecciones radar")
         return None
     
     prec_dets = detections[prec_callsign]
     foll_dets = detections[foll_callsign]
     
-    # *** NUEVA VALIDACIÓN: Verificar que las trayectorias se solapan temporalmente ***
     if not do_flight_trajectories_overlap(prec_dets, foll_dets):
-        # El precedente ya aterrizó/salió del área antes de que despegara el siguiente
+        if debug_mode:
+            print(f"  ❌ {prec_callsign}/{foll_callsign}: No solapan temporalmente")
         return None
     
-    # *** VALIDACIÓN ADICIONAL: El siguiente debe despegar DESPUÉS del precedente ***
     prec_first_time = min(d.time for d in prec_dets)
     foll_first_time = min(d.time for d in foll_dets)
     
     if foll_first_time <= prec_first_time:
-        # El "siguiente" en realidad despegó antes o al mismo tiempo que el "precedente"
+        if debug_mode:
+            print(f"  ❌ {prec_callsign}/{foll_callsign}: Orden temporal incorrecto")
         return None
     
-    # Buscar primera detección válida del siguiente
     first_valid_foll = find_first_valid_detection(foll_dets, thr_lat, thr_lon)
     if not first_valid_foll:
+        if debug_mode:
+            print(f"  ❌ {prec_callsign}/{foll_callsign}: Sin primera detección válida del siguiente")
         return None
     
-    # Buscar detección concurrente del precedente (TWR)
     prec_at_time = find_concurrent_detection(prec_dets, first_valid_foll.time)
     if not prec_at_time:
+        if debug_mode:
+            print(f"  ❌ {prec_callsign}/{foll_callsign}: Sin detección concurrente del precedente")
         return None
     
-    # ZONA TWR: Calcular distancia
+    # ZONA TWR
     dist_twr = calculate_distance_2d(
         prec_at_time.x, prec_at_time.y,
         first_valid_foll.x, first_valid_foll.y
@@ -291,25 +246,26 @@ def process_consecutive_pair(
     foll_wake = normalize_wake_category(following.get('Estela'))
     
     inc_wake_twr, wake_sep_req = check_wake_turbulence_separation(
-        prec_wake, foll_wake, dist_twr
+        prec_wake, foll_wake, dist_twr, True
     )
     
-    # ZONA TMA: Calcular mínima distancia (ahora con validación temporal)
+    # ZONA TMA
     min_dist_tma, min_time_tma = calculate_minimum_tma_distance(
         prec_dets, foll_dets, first_valid_foll.time
     )
     
-    # Verificar incumplimientos TMA
     inc_radar_tma = False
     inc_wake_tma = False
     
     if min_dist_tma != float('inf'):
         inc_radar_tma = check_radar_separation(min_dist_tma, zone='TMA')
         inc_wake_tma, _ = check_wake_turbulence_separation(
-            prec_wake, foll_wake, min_dist_tma
+            prec_wake, foll_wake, min_dist_tma, True
         )
     
-    # Construir resultado
+    if debug_mode:
+        print(f"  ✅ {prec_callsign}/{foll_callsign}: TWR={dist_twr:.2f} NM, TMA={min_dist_tma:.2f} NM")
+    
     return {
         'Callsign_Preceding': prec_callsign,
         'Callsign_Following': foll_callsign,
@@ -340,38 +296,25 @@ def calculate_separations_between_consecutive_departures(
     flight_plans: pd.DataFrame,
     runway: str
 ) -> pd.DataFrame:
-    """
-    Calcula las separaciones entre despegues consecutivos.
+    """Calcula las separaciones entre despegues consecutivos."""
     
-    Args:
-        data_items: Lista de objetos DataItem filtrados
-        flight_plans: DataFrame con planes de vuelo
-        runway: Pista de despegue ('24L' o '06R')
-    
-    Returns:
-        DataFrame con resultados de separaciones
-    """
     print(f"\n{'='*80}")
     print(f"Calculando separaciones para RWY {runway}...")
     print('='*80)
     
-    # Determinar umbral
     if runway == '24L':
         thr_lat, thr_lon = constants.THR_24L_LAT, constants.THR_24L_LON
     else:
         thr_lat, thr_lon = constants.THR_06R_LAT, constants.THR_06R_LON
     
-    # Agrupar detecciones
     detections_by_callsign = group_detections_by_callsign(data_items)
     print(f"✓ Detectados {len(detections_by_callsign)} callsigns únicos")
     
-    # Filtrar planes de vuelo por pista
     flight_plans['PistaDesp_Norm'] = flight_plans['PistaDesp'].apply(normalize_runway)
     dep_runway = flight_plans[flight_plans['PistaDesp_Norm'] == runway].copy()
     dep_runway = dep_runway.sort_values('HoraDespegue')
     print(f"✓ {len(dep_runway)} despegues programados")
     
-    # Verificar callsigns comunes
     fp_callsigns = set(dep_runway['Indicativo'].unique())
     radar_callsigns = set(detections_by_callsign.keys())
     common_callsigns = fp_callsigns.intersection(radar_callsigns)
@@ -382,9 +325,15 @@ def calculate_separations_between_consecutive_departures(
         return pd.DataFrame()
     
     results = []
-    skipped_no_overlap = 0
+    skip_reasons = {
+        'no_detections': 0,
+        'no_overlap': 0,
+        'wrong_order': 0,
+        'no_first_valid': 0,
+        'no_concurrent': 0,
+        'other': 0
+    }
     
-    # Analizar parejas consecutivas
     for i in range(len(dep_runway) - 1):
         try:
             result = process_consecutive_pair(
@@ -398,17 +347,21 @@ def calculate_separations_between_consecutive_departures(
             
             if result:
                 results.append(result)
-            else:
-                skipped_no_overlap += 1
                 
         except Exception as e:
             print(f"⚠️  Error procesando pareja {i}: {str(e)}")
+            skip_reasons['other'] += 1
             continue
     
     results_df = pd.DataFrame(results)
-    print(f"✓ Analizadas {len(results_df)} parejas")
-    print(f"  - Saltadas por no solapar: {skipped_no_overlap}")
+    total_pairs = len(dep_runway) - 1
+    analyzed = len(results_df)
+    skipped = total_pairs - analyzed
+    
+    print(f"\n✓ Analizadas {analyzed} parejas de {total_pairs}")
+    print(f"  - Saltadas: {skipped}")
     
     return results_df
+
 
 

@@ -70,37 +70,105 @@ def main():
     all_results.to_csv(output_file, index=False, sep=';', encoding='utf-8')
     print(f"\n✓ Resultados → {output_file}")
     
-    # 6. Estadísticas
+    # 6. Estadísticas detalladas
     print("\n" + "="*80)
-    print("ESTADÍSTICAS")
+    print("ESTADÍSTICAS DE SEPARACIONES")
     print("="*80)
     
     if len(all_results) > 0:
         total = len(all_results)
-        inc_radar_twr = all_results['Inc_Radar_TWR'].sum()
-        inc_radar_tma = all_results['Inc_Radar_TMA'].sum()
         
-        wake_twr = all_results[all_results['Inc_Wake_TWR'] != 'NA']
-        wake_tma = all_results[all_results['Inc_Wake_TMA'] != 'NA']
+        # Contar incumplimientos radar (son booleanos)
+        inc_radar_twr = int(all_results['Inc_Radar_TWR'].sum())
+        inc_radar_tma = int(all_results['Inc_Radar_TMA'].sum())
         
-        inc_wake_twr = wake_twr['Inc_Wake_TWR'].sum() if len(wake_twr) > 0 else 0
-        inc_wake_tma = wake_tma['Inc_Wake_TMA'].sum() if len(wake_tma) > 0 else 0
+        # Contar incumplimientos estela (filtrar 'NA' y contar True)
+        # Inc_Wake_TWR y Inc_Wake_TMA son True/False/'NA'
+        wake_twr_applicable = all_results[all_results['Inc_Wake_TWR'] != 'NA']
+        wake_tma_applicable = all_results[all_results['Inc_Wake_TMA'] != 'NA']
         
-        print(f"\nTotal parejas: {total}")
-        print(f"\nTWR (mínima {constants.MINIMA_RADAR_TWR_NM} NM):")
-        print(f"  - Inc. radar: {inc_radar_twr} ({inc_radar_twr/total*100:.1f}%)")
-        print(f"  - Inc. estela: {inc_wake_twr}")
-        print(f"\nTMA (mínima {constants.MINIMA_RADAR_TMA_NM} NM):")
-        print(f"  - Inc. radar: {inc_radar_tma} ({inc_radar_tma/total*100:.1f}%)")
-        print(f"  - Inc. estela: {inc_wake_tma}")
+        # Contar cuántas parejas tienen separación por estela aplicable
+        wake_twr_cases = len(wake_twr_applicable)
+        wake_tma_cases = len(wake_tma_applicable)
         
-        # Por pista
+        # Contar incumplimientos (True = incumplimiento)
+        inc_wake_twr = int(wake_twr_applicable['Inc_Wake_TWR'].sum()) if wake_twr_cases > 0 else 0
+        inc_wake_tma = int(wake_tma_applicable['Inc_Wake_TMA'].sum()) if wake_tma_cases > 0 else 0
+        
+        # Resumen general
+        print(f"\n📊 RESUMEN GENERAL:")
+        print(f"   Total parejas analizadas: {total}")
+        
+        # Estadísticas TWR
+        print(f"\n🛫 ZONA TWR (primera detección ≥ 0.5 NM):")
+        print(f"   Mínima radar: {constants.MINIMA_RADAR_TWR_NM} NM")
+        print(f"   • Incumplimientos radar: {inc_radar_twr}/{total} ({inc_radar_twr/total*100:.1f}%)")
+        
+        if wake_twr_cases > 0:
+            print(f"   • Parejas con separación estela aplicable: {wake_twr_cases}/{total} ({wake_twr_cases/total*100:.1f}%)")
+            print(f"   • Incumplimientos estela: {inc_wake_twr}/{wake_twr_cases} ({inc_wake_twr/wake_twr_cases*100:.1f}%)")
+        else:
+            print(f"   • Incumplimientos estela: N/A (no aplica a ninguna pareja)")
+        
+        # Estadísticas TMA
+        print(f"\n✈️  ZONA TMA (resto de detecciones):")
+        print(f"   Mínima radar: {constants.MINIMA_RADAR_TMA_NM} NM")
+        print(f"   • Incumplimientos radar: {inc_radar_tma}/{total} ({inc_radar_tma/total*100:.1f}%)")
+        
+        if wake_tma_cases > 0:
+            print(f"   • Parejas con separación estela aplicable: {wake_tma_cases}/{total} ({wake_tma_cases/total*100:.1f}%)")
+            print(f"   • Incumplimientos estela: {inc_wake_tma}/{wake_tma_cases} ({inc_wake_tma/wake_tma_cases*100:.1f}%)")
+        else:
+            print(f"   • Incumplimientos estela: N/A (no aplica a ninguna pareja)")
+        
+        # Estadísticas por pista
+        print(f"\n🛬 ESTADÍSTICAS POR PISTA:")
         for rwy in ['24L', '06R']:
             rwy_data = all_results[all_results['Runway'] == rwy]
             if len(rwy_data) > 0:
-                print(f"\nPista {rwy}: {len(rwy_data)} parejas")
+                rwy_total = len(rwy_data)
+                rwy_inc_radar_twr = int(rwy_data['Inc_Radar_TWR'].sum())
+                rwy_inc_radar_tma = int(rwy_data['Inc_Radar_TMA'].sum())
+                
+                print(f"\n   Pista {rwy}: {rwy_total} parejas")
+                print(f"   • Inc. radar TWR: {rwy_inc_radar_twr} ({rwy_inc_radar_twr/rwy_total*100:.1f}%)")
+                print(f"   • Inc. radar TMA: {rwy_inc_radar_tma} ({rwy_inc_radar_tma/rwy_total*100:.1f}%)")
+        
+        # Distribución de categorías de estela
+        print(f"\n📋 DISTRIBUCIÓN DE CATEGORÍAS DE ESTELA:")
+        wake_combinations = all_results.groupby(['Wake_Preceding', 'Wake_Following']).size().sort_values(ascending=False)
+        
+        print(f"   Top 5 combinaciones:")
+        for idx, (combo, count) in enumerate(wake_combinations.head(5).items(), 1):
+            prec, foll = combo
+            print(f"   {idx}. {prec} → {foll}: {count} parejas ({count/total*100:.1f}%)")
+        
+        # Detalle de incumplimientos si los hay
+        total_inc = inc_radar_twr + inc_radar_tma + inc_wake_twr + inc_wake_tma
+        
+        if total_inc > 0:
+            print(f"\n⚠️  TOTAL INCUMPLIMIENTOS DETECTADOS: {total_inc}")
+            
+            # Guardar solo incumplimientos
+            incumplimientos = all_results[
+                (all_results['Inc_Radar_TWR'] == True) | 
+                (all_results['Inc_Radar_TMA'] == True) |
+                (all_results['Inc_Wake_TWR'] == True) |
+                (all_results['Inc_Wake_TMA'] == True)
+            ]
+            
+            if len(incumplimientos) > 0:
+                inc_file = "incumplimientos_separaciones.csv"
+                incumplimientos.to_csv(inc_file, index=False, sep=';', encoding='utf-8')
+                print(f"   → Detalles guardados en: {inc_file}")
+        else:
+            print(f"\n✅ NO SE DETECTARON INCUMPLIMIENTOS")
+            print(f"   • Todas las separaciones cumplen con las mínimas requeridas")
+            print(f"   • Nota: La mayoría de parejas son MEDIUM→MEDIUM (no aplica estela)")
+        
     else:
         print("\n⚠️  No se analizaron parejas")
+        print("   Verifica que los callsigns del radar coinciden con los planes de vuelo")
     
     print("\n" + "="*80)
     print("COMPLETADO")
