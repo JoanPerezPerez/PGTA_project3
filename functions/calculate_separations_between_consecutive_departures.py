@@ -52,20 +52,31 @@ def find_first_valid_detection(
     min_distance_nm: float = constants.DISTANCIA_INICIAL_CALCULO_NM
 ) -> Optional[DataItem]:
     """
-    Encuentra la primera detección válida (>= distancia mínima del umbral).
+    Encuentra la primera detección válida (>= 0.5 NM del umbral EN MODO ALEJAMIENTO).
     
-    Args:
-        detections: Lista de detecciones ordenadas por tiempo
-        thr_lat, thr_lon: Coordenadas del umbral
-        min_distance_nm: Distancia mínima requerida del umbral
-    
-    Returns:
-        Primera detección válida o None si no existe
+    CORREGIDO: Verifica que la aeronave se está ALEJANDO del umbral.
     """
+    prev_distance = None
+    
     for det in detections:
         dist_to_thr = calculate_distance_to_threshold(det.lat, det.lon, thr_lat, thr_lon)
+        
+        # Verificar si cumple distancia mínima
         if dist_to_thr >= min_distance_nm:
-            return det
+            # Verificar modo ALEJAMIENTO
+            if prev_distance is None:
+                # Primera iteración: asumir que es válida si cumple distancia
+                prev_distance = dist_to_thr
+                continue
+            elif dist_to_thr > prev_distance:
+                # Se está ALEJANDO del umbral → VÁLIDO
+                return det
+            else:
+                # Se está ACERCANDO al umbral → seguir buscando
+                prev_distance = dist_to_thr
+        else:
+            prev_distance = dist_to_thr
+    
     return None
 
 

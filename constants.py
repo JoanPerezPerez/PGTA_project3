@@ -20,7 +20,7 @@ RADIO_ESFERA_CONFORME_M = 6368942.808  # Radio en metros
 
 # Mínimas de separación radar (CORREGIDO)
 MINIMA_RADAR_TWR_NM = 3.0  # 3 NM en zona TWR
-MINIMA_RADAR_TMA_NM = 5.0  # 5 NM en zona TMA
+MINIMA_RADAR_TMA_NM = 3.0  # 5 NM en zona TMA
 
 # Distancia inicial para considerar el cálculo
 DISTANCIA_INICIAL_CALCULO_NM = 0.5
