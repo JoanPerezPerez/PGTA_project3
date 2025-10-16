@@ -17,3 +17,6 @@ TMA_CENTER_LON = 1 + 41/60 + 33.010/3600  # 1°41'33.010"E
 # Radio de la esfera conforme
 RADIO_ESFERA_CONFORME_NM = 3438.954  # Radio en NM
 RADIO_ESFERA_CONFORME_M = 6368942.808  # Radio en metros
+
+RADAR_UPDATE_TIME = 4  # Tiempo de radar en segundos
+MINIMA = 3 # Distancia mínima en NM
