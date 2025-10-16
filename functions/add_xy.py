@@ -45,7 +45,7 @@ def add_xy_to_filtered_csv(
       - X, Y (NM)
       - thr_distance_nm (mínima a THR 24L/06R)
       - ATCZone con transición persistente: TWR hasta cruzar 0.5 NM; la PRIMERA ≥0.5 sigue TWR
-        por tolerancia del radar (4 s), y a partir de la siguiente muestra del mismo callsign: TMA.
+        por tolerancia del radar (4 s), y desde la siguiente muestra de ese callsign: TMA.
     """
     read_kwargs = {"sep": sep}
     if decimal is not None:

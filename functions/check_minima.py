@@ -2,21 +2,27 @@ import pandas as pd
 import constants
 from functions.geo_utils import calculate_distance_to_threshold
 
-def _compute_thr_distance_from_latlon(df: pd.DataFrame, lat_cols=("lat","LAT"), lon_cols=("lon","LON")) -> pd.Series:
+def _compute_thr_distance_from_latlon(
+    df: pd.DataFrame,
+    lat_cols=("lat","LAT","Lat","Latitude"),
+    lon_cols=("lon","LON","Lon","Longitude")
+) -> pd.Series:
     lat_name = next((c for c in lat_cols if c in df.columns), None)
     lon_name = next((c for c in lon_cols if c in df.columns), None)
     if lat_name is None or lon_name is None:
         # No se puede calcular de forma automática
         return pd.Series([float("nan")] * len(df), index=df.index)
+    lat_vals = pd.to_numeric(df[lat_name], errors="coerce")
+    lon_vals = pd.to_numeric(df[lon_name], errors="coerce")
+
     def _row(la, lo):
         if pd.isna(la) or pd.isna(lo):
             return float("nan")
         d24 = calculate_distance_to_threshold(la, lo, constants.THR_24L_LAT, constants.THR_24L_LON)
         d06 = calculate_distance_to_threshold(la, lo, constants.THR_06R_LAT, constants.THR_06R_LON)
         return min(d24, d06)
-    return pd.Series([_row(la, lo) for la, lo in zip(pd.to_numeric(df[lat_name], errors="coerce"),
-                                                     pd.to_numeric(df[lon_name], errors="coerce"))],
-                     index=df.index)
+
+    return pd.Series((_row(la, lo) for la, lo in zip(lat_vals, lon_vals)), index=df.index)
 
 def check_minima(
     distances_df: pd.DataFrame,
@@ -27,8 +33,8 @@ def check_minima(
 ) -> pd.DataFrame:
     """
     Paso h) - Verifica incumplimientos con una única mínima (constants.MINIMA).
-    Usa thr_distance_nm y/o ATCZone si existen; si no, intenta derivar thr_distance_nm
-    desde lat/lon (lat/LAT, lon/LON) y clasifica ATCZone en función del umbral 0.5 NM.
+    Usa thr_distance_nm y/o ATCZone si existen (calculados en add_xy). Si no, intenta
+    derivar thr_distance_nm desde lat/lon y clasifica ATCZone con umbral 0.5 NM.
     Consolida TMA conservando solo la primera infracción por par.
     """
     if distance_col not in distances_df.columns:
@@ -38,11 +44,11 @@ def check_minima(
 
     df = distances_df.copy()
 
-    # Garantizar thr_distance_nm
+    # Garantizar thr_distance_nm si no vino desde add_xy
     if "thr_distance_nm" not in df.columns:
         df["thr_distance_nm"] = _compute_thr_distance_from_latlon(df)
 
-    # Garantizar ATCZone (si no viene desde add_xy)
+    # Garantizar ATCZone si no vino desde add_xy
     if "ATCZone" not in df.columns:
         df["ATCZone"] = "TMA"
         df.loc[pd.to_numeric(df["thr_distance_nm"], errors="coerce") < tower_threshold_nm, "ATCZone"] = "TWR"
