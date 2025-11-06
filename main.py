@@ -8,6 +8,7 @@ from functions.P3_loader_and_filter import (
     leer_callsigns_validos_p3,
 )
 from functions.add_xy import add_xy_to_filtered_csv
+from functions.check_wake_turbulence import check_wake_turbulence_violations, get_wake_violations_detail
 from functions.compute_distance import compute_distance, get_twr_tma_distances
 from functions.check_minima import check_minima_violations, get_violations_detail
 
@@ -76,7 +77,37 @@ def main():
     # 7) Extraer solo incumplimientos para análisis detallado
     df_violations = get_violations_detail(df_with_violations, zone='both')
     df_violations.to_csv("Outputs/violations_only.csv", index=False)
+   
+    # 8) NUEVO: Verificar incumplimientos de separación por wake turbulence
+    print("\n→ Verificando incumplimientos de wake turbulence...")
 
+    # Cargar información de aeronaves con categoría de estela
+    df_aircraft_info = pd.read_excel("Inputs/P3_DEP_LEBL.xlsx", sheet_name="Hoja1")
+
+    df_with_wake_violations, wake_stats = check_wake_turbulence_violations(
+        df_twr_tma=df_twr_tma,
+        callsign_col_preceding="callsign_preceding",
+        callsign_col_following="callsign_following",
+        wake_prec_col= 'wake_cat_preceding',
+        wake_foll_col='wake_cat_following'
+    )
+    # 10) Mostrar estadísticas de Wake Turbulence (aunque sean 0)
+    print("\n=== ESTADÍSTICAS DE WAKE TURBULENCE ===")
+    print(f"Total de parejas evaluadas: {wake_stats.get('total_pairs', 0)}")
+    print(f"Parejas con restricción wake: {wake_stats.get('pairs_with_wake_restriction', 0)}")
+    print(f"Incumplimientos wake en TWR: {wake_stats.get('wake_violations_twr', 0)}")
+    print(f"Incumplimientos wake en TMA: {wake_stats.get('wake_violations_tma', 0)}")
+    print(f"Incumplimientos wake en ambos: {wake_stats.get('wake_violations_both', 0)}")
+    print(f"Incumplimientos wake (TWR o TMA): {wake_stats.get('wake_violations_any', 0)}")
+
+    
+    df_with_wake_violations.to_csv("Outputs/wake_turbulence_check.csv", index=False)
+
+    # 9) NUEVO: Extraer solo incumplimientos de wake turbulence
+    df_wake_violations = get_wake_violations_detail(df_with_wake_violations, zone='both')
+    df_wake_violations.to_csv("Outputs/wake_violations_only.csv", index=False)
+    
+    
     print("\n=== PROCESAMIENTO COMPLETADO ===")
     print(f"→ Archivos generados en carpeta 'Outputs/'")
 
