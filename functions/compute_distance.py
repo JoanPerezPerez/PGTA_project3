@@ -87,6 +87,8 @@ def compute_distance(
     callsign_to_id = dict(zip(df_order['Indicativo_norm'], df_order['id']))
     callsign_to_runway = dict(zip(df_order['Indicativo_norm'], df_order['PistaDesp']))
     callsign_to_sid = dict(zip(df_order['Indicativo_norm'], df_order['ProcDesp']))
+    callsign_to_type = dict(zip(df_order['Indicativo_norm'], df_order['TipoAeronave'])) 
+    callsign_to_proc = dict(zip(df_order['Indicativo_norm'], df_order['ProcDesp']))
     callsign_to_wake = dict(zip(
         df_order['Indicativo_norm'],
         df_order['Estela'].astype(str).str.strip().str.capitalize()
@@ -105,6 +107,8 @@ def compute_distance(
     df_filtered['runway'] = df_filtered[callsign_col].map(callsign_to_runway)
     df_filtered['sid'] = df_filtered[callsign_col].map(callsign_to_sid)
     df_filtered['wake_cat'] = df_filtered[callsign_col].map(callsign_to_wake).fillna('Desconocida')
+    df_filtered['ac_type'] = df_filtered[callsign_col].map(callsign_to_type)
+    df_filtered['dep_proc'] = df_filtered[callsign_col].map(callsign_to_proc)
 
     # 3) Definir parejas consecutivas según id
     sorted_ids = sorted(df_filtered['id'].dropna().unique())
@@ -137,6 +141,10 @@ def compute_distance(
         sid_foll = df_foll['sid'].iloc[0]
         wake_prec = df_prec['wake_cat'].iloc[0]
         wake_foll = df_foll['wake_cat'].iloc[0]
+        ac_type_prec = df_prec['ac_type'].iloc[0]
+        ac_type_foll = df_foll['ac_type'].iloc[0]
+        proc_prec    = df_prec['dep_proc'].iloc[0]
+        proc_foll    = df_foll['dep_proc'].iloc[0]
 
         if only_same_runway and runway_prec != runway_foll:
             pairs_skipped_filter += 1
@@ -230,6 +238,10 @@ def compute_distance(
         merged['callsign_following'] = callsign_foll
         merged['wake_cat_preceding'] = wake_prec
         merged['wake_cat_following'] = wake_foll
+        merged['ac_type_preceding'] = ac_type_prec          
+        merged['ac_type_following'] = ac_type_foll          
+        merged['proc_preceding']    = proc_prec              
+        merged['proc_following']    = proc_foll
 
         # Renombrado de coordenadas
         merged = merged.rename(columns={
@@ -329,7 +341,11 @@ def get_twr_tma_distances(df_distances: pd.DataFrame) -> pd.DataFrame:
             'distance_twr_nm': distance_twr,
             'time_twr': time_twr,
             'distance_tma_nm': distance_tma,
-            'time_tma': time_tma
+            'time_tma': time_tma,
+            'ac_type_preceding': twr_row['ac_type_preceding'],
+            'ac_type_following': twr_row['ac_type_following'],
+            'proc_preceding': twr_row['proc_preceding'],
+            'proc_following': twr_row['proc_following']
         })
     
     df_result = pd.DataFrame(results)

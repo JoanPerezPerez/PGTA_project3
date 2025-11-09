@@ -8,6 +8,7 @@ from functions.P3_loader_and_filter import (
     leer_callsigns_validos_p3,
 )
 from functions.add_xy import add_xy_to_filtered_csv
+from functions.check_loa_compilance import check_loa_compliance
 from functions.check_wake_turbulence import check_wake_turbulence_violations, get_wake_violations_detail
 from functions.compute_distance import compute_distance, get_twr_tma_distances
 from functions.check_minima import check_minima_violations, get_violations_detail
@@ -108,6 +109,18 @@ def main():
     df_wake_violations.to_csv("Outputs/wake_violations_only.csv", index=False)
     
     
+    print("\n→ Verificando cumplimiento de LoA...")
+    df_loa = check_loa_compliance(df_twr_tma)
+    df_loa.to_csv("Outputs/loa_check_full.csv", index=False)
+
+
+    df_loa_bad = df_loa[df_loa["loa_ok"] == False].copy()
+    df_loa_bad.to_csv("Outputs/loa_violations_only.csv", index=False)
+
+    total_pairs = len(df_loa)
+    total_bad = len(df_loa_bad)
+    print(f"Parejas evaluadas LoA: {total_pairs}")
+    print(f"Incumplimientos LoA: {total_bad}")
     print("\n=== PROCESAMIENTO COMPLETADO ===")
     print(f"→ Archivos generados en carpeta 'Outputs/'")
 
