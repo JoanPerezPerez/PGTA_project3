@@ -216,18 +216,24 @@ def compute_distance(
         d_pair, d_thr_p, d_thr_f = [], [], []
         for _, row in merged.iterrows():
             dist = calculate_distance_2d(row[f'{x_col}_preceding'], row[f'{y_col}_preceding'],
-                                         row[f'{x_col}_following'], row[f'{y_col}_following'])
+                                        row[f'{x_col}_following'], row[f'{y_col}_following'])
             d_pair.append(dist)
             d_thr_p.append(calculate_distance_to_threshold(row[f'{lat_col}_preceding'], row[f'{lon_col}_preceding'], thr_lat, thr_lon))
             d_thr_f.append(calculate_distance_to_threshold(row[f'{lat_col}_following'], row[f'{lon_col}_following'], thr_lat, thr_lon))
 
+        # Después de calcular d_thr_p y d_thr_f
         merged['distance_nm'] = d_pair
         merged['distance_to_threshold_preceding'] = d_thr_p
         merged['distance_to_threshold_following'] = d_thr_f
+        merged['is_moving_away_preceding'] = merged['distance_to_threshold_preceding'].diff() > 0
+        merged['is_moving_away_following'] = merged['distance_to_threshold_following'].diff() > 0
         merged['both_beyond_threshold'] = (
             (merged['distance_to_threshold_preceding'] > threshold_twr_nm) &
-            (merged['distance_to_threshold_following'] > threshold_twr_nm)
+            (merged['distance_to_threshold_following'] > threshold_twr_nm) &
+            (merged['is_moving_away_preceding']) &
+            (merged['is_moving_away_following'])
         )
+
 
         # Metadatos y categorías
         merged['runway_preceding'] = runway_prec
@@ -299,7 +305,12 @@ def get_twr_tma_distances(df_distances: pd.DataFrame) -> pd.DataFrame:
     
     for (id_prec, id_foll), group in grouped:
         # Filtrar detecciones válidas (ambos más allá del threshold)
-        valid_detections = group[group['both_beyond_threshold'] == True].copy()
+# Filtrar solo detecciones donde AMBOS aviones se alejan
+        valid_detections = group[
+            (group['both_beyond_threshold'] == True) &
+            (group['is_moving_away_preceding'] == True) &
+            (group['is_moving_away_following'] == True)
+        ].copy()
         
         if len(valid_detections) == 0:
             # No hay detecciones válidas, intentar usar todas las detecciones
