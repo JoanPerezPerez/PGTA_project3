@@ -20,3 +20,6 @@ RADIO_ESFERA_CONFORME_M = 6368942.808  # Radio en metros
 
 RADAR_UPDATE_TIME = 4  # Tiempo de radar en segundos
 MINIMA = 3 # Distancia mínima en NM
+
+DVOR_BCN_LAT = 41 + 16/60 + 05.4/3600  # 41°29'33.0"N
+DVOR_BCN_LON = 2 + 2/60 + 0.0/3600    # 2°04'59.0"E
