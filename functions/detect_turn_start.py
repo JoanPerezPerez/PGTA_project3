@@ -163,12 +163,12 @@ def add_extra_info_to_turns(df_turns: pd.DataFrame, df_joined: pd.DataFrame) -> 
     # Agrupar info relevante por vuelo (id)
     df_info = df_joined.groupby("id").agg({
         "ProcDesp": "first",    # SID
-        "CAT": "first",         # Tipo aeronave
-        "SAC": "first"          # Estela (ajusta si tienes un campo mejor)
+        "TipoAeronave": "first",         # Tipo aeronave
+        "Estela": "first"          # Estela (ajusta si tienes un campo mejor)
     }).rename(columns={
         "ProcDesp": "SID",
-        "CAT": "TipoAeronave",
-        "SAC": "Estela"
+        "TipoAeronave": "TipoAeronave",
+        "Estela": "Estela"
     }).reset_index()
 
     # Calcular si atraviesa radial 234 bajo 500 ft

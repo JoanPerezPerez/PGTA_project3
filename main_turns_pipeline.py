@@ -80,6 +80,7 @@ def main_turns_pipeline():
     df_joined = join_plan_radar(
         "Inputs/P3_DEP_LEBL.xlsx",
         "Inputs/P3_04h_08h.csv",
+        "LEBL-24L"
     )
     df_joined.to_csv("Outputs/joinedP3.csv", index=False)
     df_turns = detect_turns_all_flights(df_joined)

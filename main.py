@@ -27,6 +27,7 @@ from functions.detect_turn_start import detect_turns_all_flights
 from functions.load_and_join_radar import join_plan_radar
 #from main_turns_pipeline import build_czml_for_flight, write_cesium_html
 from  main_turns_pipeline import main_turns_pipeline
+from main_IAS import main_IAS
 
 
 def main():
@@ -145,8 +146,10 @@ def main():
     print(f"Parejas evaluadas LoA: {total_pairs}")
     print(f"Incumplimientos LoA: {total_bad}")
 
+
+    main_turns_pipeline()
+    main_IAS()
     print("\n=== PROCESAMIENTO COMPLETADO (SEPARACIONES) ===")
     print("→ Archivos generados en carpeta 'Outputs/'")
-    main_turns_pipeline()
 if __name__ == "__main__":
     main()
