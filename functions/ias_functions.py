@@ -120,7 +120,7 @@ def extract_IAS_by_altitude(df_joined: pd.DataFrame, altitudes_ft=[850,1500,3500
     for flight_id, group in df_joined.groupby("id"):
         callsign = group["callsign"].iloc[0]
         SID = group["ProcDesp"].iloc[0] if "ProcDesp" in group.columns else "Unknown"
-        airline = group["BP"].iloc[0] if "BP" in group.columns else "Unknown"
+        #airline = group["BP"].iloc[0] if "BP" in group.columns else "Unknown"
         ac_type = group["TipoAeronave"].iloc[0] if "TipoAeronave" in group.columns else "Unknown"
         runway = group["PistaDesp"].iloc[0] if "PistaDesp" in group.columns else "Unknown"
         time_takeoff = group["ATOT"].iloc[0] if "ATOT" in group.columns else "Unknown"
@@ -136,7 +136,7 @@ def extract_IAS_by_altitude(df_joined: pd.DataFrame, altitudes_ft=[850,1500,3500
                 "time_despegue": time_takeoff,
                 "SID": SID,
                 "Estela": estela,
-                "Airline": airline,
+                #"Airline": airline,
                 "AircraftType": ac_type,
                 "Runway": runway,
                 f"IAS_{alt_ft}ft": row_closest.get("IAS", np.nan),
@@ -145,6 +145,46 @@ def extract_IAS_by_altitude(df_joined: pd.DataFrame, altitudes_ft=[850,1500,3500
             })
 
     return pd.DataFrame(records)
+def extract_IAS_by_altitude_single_line(df_joined: pd.DataFrame, altitudes_ft=[850,1500,3500]) -> pd.DataFrame:
+    """
+    Extrae IAS para cada vuelo y altitud dada, pero devuelve un DataFrame con una fila por vuelo
+    y columnas separadas para cada altitud (IAS, tiempo, altitud).
+    """
+    rows = []
+    grouped = df_joined.groupby("id")
+
+    for flight_id, group in grouped:
+        callsign = group["callsign"].iloc[0]
+        SID = group["ProcDesp"].iloc[0] if "ProcDesp" in group.columns else "-"
+        estela = group["Estela"].iloc[0] if "Estela" in group.columns else "-"
+        #airline = group["BP"].iloc[0] if "BP" in group.columns else "-"
+        ac_type = group["TipoAeronave"].iloc[0] if "Type_Aer" in group.columns else "-"
+        runway = group["PistaDesp"].iloc[0] if "PistaDesp" in group.columns else "-"
+        time_takeoff = group["ATOT"].iloc[0] if "ATOT" in group.columns else "-"
+
+        # Diccionario base para fila de resultados
+        row_data = {
+            "callsign": callsign,
+            "time_despegue": time_takeoff,
+            "SID": SID,
+            "Estela": estela,
+            #"Airline": airline,
+            "AircraftType": ac_type,
+            "Runway": runway
+        }
+
+        for alt_ft in altitudes_ft:
+            group["diff_alt"] = abs(group["Hft"] - alt_ft)
+            closest_row = group.loc[group["diff_alt"].idxmin()]
+
+            row_data[f"IAS_{alt_ft}ft"] = closest_row.get("IAS", None)
+            row_data[f"IAS_{alt_ft}ft_time"] = closest_row.get("Time", "")
+            row_data[f"IAS_{alt_ft}ft_altitude"] = closest_row.get("Hft", None)
+
+        rows.append(row_data)
+
+    df_result = pd.DataFrame(rows)
+    return df_result
 
 
 # --- Guardar resultados ---
